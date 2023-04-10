@@ -16,8 +16,8 @@ from urllib.request import urlopen, Request
 
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "03/04/2022"
-end_date = "05/04/2022"
+start_date = "06/04/2022"
+end_date = "06/04/2022"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -113,19 +113,20 @@ def convert_atos_to_csv(date = '02-02-2022'):
 
         if total_atos == 0:
             print(f'\t{date} - {jornal} - Sem publicações!')
+            continue
 
         for ato in atos:
-            content_full = get_html_from_pub_order(date, jornal, ato["pubOrder"])
+            content_full = get_html_from_pub_order(date, jornal, ato["urlTitle"])
             ato["content_full"] = content_full
             conteudo = convert_to_csv_row(ato)
             csv_writer.writerow(conteudo)
 
     csv_file.close()
 
-def get_html_from_pub_order(date, jornal, pub_order):
+def get_html_from_pub_order(date, jornal, url_title):
     HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
     content = ''
-    with open(HTML_ATOS_DIR_PATH + pub_order + '.html') as file:
+    with open(HTML_ATOS_DIR_PATH + url_title.replace('/','-')) as file:
         content = file.read()
     return content
 
@@ -160,8 +161,8 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue()):
 
 def single_ato_to_file(ato, target_path):
     content_full = str(fetch_ato_content(ato["urlTitle"]))
-    pubOrder = ato["pubOrder"]
-    target_file_path = target_path + pubOrder + '.html'
+    urlTitle = ato["urlTitle"]
+    target_file_path = target_path + urlTitle.replace('/','-')
     with open(target_file_path, 'w') as t_file:
         t_file.write(content_full)
 
@@ -179,7 +180,12 @@ def convert_to_csv_row(conteudo):
 
 def fetch_ato_content(url_title):
     BASE_ATO_URL = "https://www.in.gov.br/web/dou/-/"
-    response_html = requests.get(f'{BASE_ATO_URL}{url_title}').text
+    req_headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
+        "Connection": "keep-alive",
+        "Accept": "text/html",
+    }
+    response_html = requests.get(f'{BASE_ATO_URL}{url_title}', headers=req_headers, timeout=10).text
     response_html.replace(os.linesep, '')
     soup = bs(response_html, 'html.parser')
     elements = soup.find_all(attrs={"class": "texto-dou"})
@@ -196,7 +202,13 @@ def fetch_all_pubs_dia(date, DEST_PATH = "", secao="do1"):
 
     URL_STR = f'{MAIN_URL}data={date}&secao={secao}'
     JSON_PATH = DEST_PATH.replace('html', 'json') + '.json'
-    with urlopen(URL_STR) as base_html, open(DEST_PATH, 'wb') as f, open(JSON_PATH, 'w') as f_json:
+
+    r = Request(URL_STR)
+    r.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36')
+    r.add_header('Connection', 'keep-alive')
+    r.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7')
+
+    with urlopen(r) as base_html, open(DEST_PATH, 'wb') as f, open(JSON_PATH, 'w') as f_json:
         f.write(base_html.read())
 
     with open(DEST_PATH, 'r') as o_file, open(JSON_PATH, 'w') as f_json:
@@ -228,10 +240,10 @@ class DonwloadWorker(Thread):
             # DATE_LINE_SEP, FILE_PATH, secao = self.queue.get()
 
             # atos
-            # ato, HTML_ATOS_DIR_PATH, message_prefix = self.queue.get()
+            ato, HTML_ATOS_DIR_PATH, message_prefix = self.queue.get()
 
             # csv
-            DATE_LINE_SEP = self.queue.get()
+            # DATE_LINE_SEP = self.queue.get()
             try:
                 # diarios
                 # print(f'{DATE_LINE_SEP} - {secao} -->> Iniciado!')
@@ -239,31 +251,32 @@ class DonwloadWorker(Thread):
                 # print(f'{DATE_LINE_SEP} - {secao} <<-- Download concluído!')
 
                 # atos
-                # print(f'{message_prefix} -->> Iniciado!')
-                # single_ato_to_file(ato, HTML_ATOS_DIR_PATH)
-                # print(f'{message_prefix} <<-- Download concluído!')
+                print(f'{message_prefix} -->> Iniciado!')
+                single_ato_to_file(ato, HTML_ATOS_DIR_PATH)
+                print(f'{message_prefix} <<-- Download concluído!')
 
                 # csv
-                print(f'{DATE_LINE_SEP} -->> Iniciado!')
-                convert_atos_to_csv(DATE_LINE_SEP)
-                print(f'{DATE_LINE_SEP} <<-- Download concluído!')
-            except:
+                # print(f'{DATE_LINE_SEP} -->> Iniciado!')
+                # convert_atos_to_csv(DATE_LINE_SEP)
+                # print(f'{DATE_LINE_SEP} <<-- Download concluído!')
+            except Exception as e:
+                print(e)
                 with open('./error.txt', 'a') as error_file:
                     # error_file.write(f'Erro! - {DATE_LINE_SEP} - {secao}')
-                    # error_file.write(f'Erro! - {message_prefix}\n\n')
-                    error_file.write(f'Erro! - {DATE_LINE_SEP}')
+                    error_file.write(f'Erro! - {message_prefix}\n{e}\n\n')
+                    # error_file.write(f'Erro! - {DATE_LINE_SEP}')
             finally:
                 self.queue.task_done()
 
 
 def main_diarios():
     ts = time()
-    dates_list = generate_dates()
-    # dates_list = ["02/02/2022", "03/02/2022"]
+    # dates_list = generate_dates()
+    dates_list = ["04/04/2022"]
 
     queue = Queue()
 
-    for x in range(300):
+    for x in range(200):
         worker = DonwloadWorker(queue)
         worker.daemon = True
         worker.start()
@@ -287,12 +300,12 @@ def main_diarios():
 
 def main_atos():
     ts = time()
-    dates_list = generate_dates()
-    # dates_list = ["02/02/2022", "03/02/2022"]
+    # dates_list = generate_dates()
+    dates_list = ["04/04/2022"]
 
     queue = Queue()
 
-    for x in range(500):
+    for x in range(20):
         worker = DonwloadWorker(queue)
         worker.daemon = True
         worker.start()
@@ -315,8 +328,8 @@ def main_atos():
 
 def main_csv():
     ts = time()
-    dates_list = generate_dates()
-    # dates_list = ["02/02/2022", "03/02/2022"]
+    # dates_list = generate_dates()
+    dates_list = ["04/04/2022"]
 
     queue = Queue()
 
@@ -341,5 +354,5 @@ def main_csv():
 
 if __name__ == '__main__':   
     # main_diarios()
-    # main_atos()
-    main_csv()
+    main_atos()
+    # main_csv()
