@@ -31,8 +31,8 @@ HTTPConnection.default_socket_options = (
 
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "06/04/2022"
-end_date = "06/04/2022"
+start_date = "01/11/2022"
+end_date = "30/11/2022"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -311,14 +311,18 @@ def fetch_all_pubs_dia(date, DEST_PATH = "", secao="do1"):
         split2 = split1[1].split('</script>')
         f_json.write(split2[0])
 
+    write_processed_date(date, secao, 'diarios')
+
     create_atos_dir(date, secao)
 
-def request_get_html_plw(URL_STR):
+def request_get_html_plw(URL_STR, is_full_diario = False):
     html = ""
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.goto(URL_STR, wait_until="load")
+        if is_full_diario:
+            page.waitForSelector("div.portlet-boundary_leituradou_")
         # page.once("load", lambda: print("page loaded!"))
         html = page.content()
         browser.close()
@@ -342,7 +346,6 @@ class DiarioDownloaderWorker(Thread):
         while True:
             # diarios
             DATE_LINE_SEP, FILE_PATH, secao = self.queue.get()
-
             try:
                 # diarios
                 print(f'{DATE_LINE_SEP} - {secao} -->> Iniciado!')
@@ -401,12 +404,12 @@ class CSVBuilderWorker(Thread):
 
 def main_diarios():
     ts = time()
-    # dates_list = generate_dates()
-    dates_list = ["20/03/2023"]
+    dates_list = generate_dates()
+    # dates_list = ["20/03/2023"]
 
     queue = Queue()
 
-    for x in range(5):
+    for x in range(10):
         worker = DiarioDownloaderWorker(queue)
         worker.daemon = True
         worker.start()
@@ -415,23 +418,25 @@ def main_diarios():
         for secao in SECOES_DOU:
             DATE_LINE_SEP = date.replace("/","-")
             FILE_PATH = BASE_HTML_DIR + f'{DATE_LINE_SEP}-{secao}'
-
             queue.put((DATE_LINE_SEP, FILE_PATH, secao))
-    
-    queue.join()
+            
+    queue.join()  
 
     for date in dates_list:
             DATE_LINE_SEP = date.replace("/","-")
             for secao in SECOES_DOU:
-                write_processed_date(DATE_LINE_SEP, secao, 'diarios')
+                FILE_PATH = BASE_HTML_DIR + f'{DATE_LINE_SEP}-{secao}'
+                while not find_date_in_processed_file(DATE_LINE_SEP, secao, 'diarios'):
+                    queue.put((DATE_LINE_SEP, FILE_PATH, secao))
+                    queue.join()
 
     print('Processamento concluído!')
-    print('Finalizado em %s', time() - ts)
+    print('Finalizado em ' + str(time() - ts))
 
 def main_atos():
     ts = time()
-    # dates_list = generate_dates()
-    dates_list = ["20/03/2023"]
+    dates_list = generate_dates()
+    # dates_list = ["20/03/2023"]
 
     queue = Queue()
 
@@ -491,6 +496,6 @@ def main_csv():
     print('Finalizado em %s', time() - ts)
 
 if __name__ == '__main__':   
-    # main_diarios()
-    main_atos()
+    main_diarios()
+    # main_atos()
     # main_csv()
