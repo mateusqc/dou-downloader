@@ -16,6 +16,7 @@ from urllib.request import urlopen, Request
 
 import socket
 from urllib3.connection import HTTPConnection
+from playwright.sync_api import sync_playwright
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -25,6 +26,8 @@ HTTPConnection.default_socket_options = (
         (socket.SOL_TCP, socket.TCP_KEEPCNT, 6)
     ]
 )
+
+
 
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
@@ -153,8 +156,6 @@ def get_html_from_pub_order(date, jornal, id):
         content = file.read()
     return content
 
-
-
 def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue()):
     if find_date_in_processed_file(date, jornal, 'atos'):
         print(f'{date} - {jornal} - Já processado!')
@@ -194,25 +195,60 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue()):
         with open(JSON_FILE_PATH, 'w') as json_file:
             json.dump(parsed_json, json_file)
 
-def single_ato_to_file(ato, target_path = ""):
+def validate_atos_processed(date = '02-02-2022', jornal = 'do1', queue = Queue()):
+    JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
+    HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
+
+    parsed_json = {}
+
+    with open(JSON_FILE_PATH, 'r') as json_file:
+        json_content = json_file.read()
+        parsed_json = json.loads(json_content)
+        json_file.close()
+
+    atos = parsed_json["jsonArray"]
+
+    total_atos = len(atos)
+    atos_para_processamento = 0
+
+    if total_atos == 0:
+        print(f'\t{date} - {jornal} - Sem publicações!')
+
+    has_unprocessed_registry = False
+
+    for ato in atos:
+        if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
+            queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
+            has_unprocessed_registry = True
+        atos_para_processamento += 1
+    
+    return has_unprocessed_registry
+
+def single_ato_to_file(ato, target_path = "", message_prefix = ""):
     id = ato["uuid"]
     target_file_path = target_path + id + '.html'
     processed_file_path = target_path + 'processed.txt'
 
     if os.path.exists(processed_file_path) and find_uuid_in_processed(id, processed_file_path):
-        print("\tAto já obtido!")
+        print(f'{message_prefix} -- Ato já obtido!')
         return
     
-    content_full = str(fetch_ato_content(ato["urlTitle"]))
-    with open(target_file_path, 'w') as t_file:
-        t_file.write(content_full)
+    print(f'{message_prefix} -->> Iniciado!')
+    content_full_unparsed, found = fetch_ato_content(ato["urlTitle"])
+    content_full = str(content_full_unparsed)
+    
+    if found:
+        with open(target_file_path, 'w') as t_file:
+            t_file.write(content_full)
 
-    operation = 'a'
-    if not os.path.exists(processed_file_path):
-        operation = 'w'
+        operation = 'a'
+        if not os.path.exists(processed_file_path):
+            operation = 'w'
 
-    with open(processed_file_path, operation) as file:
-        file.write(id+'\n')
+        with open(processed_file_path, operation) as file:
+            file.write(id+'\n')
+        
+        print(f'{message_prefix} <<-- Download concluído!')
 
 
 
@@ -228,21 +264,27 @@ def convert_to_csv_row(conteudo):
 
 def fetch_ato_content(url_title):
     BASE_ATO_URL = "https://www.in.gov.br/web/dou/-/"
-    req_headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
-        "Connection": "keep-alive",
-        "Accept": "text/html",
-        "Referer": "https://www.in.gov.br/leiturajornal?data=04-04-2022&secao=do3"
-    }
-    response_html = requests.get(f'{BASE_ATO_URL}{url_title}', headers=req_headers, timeout=50).text
+    # req_headers = {
+    #     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
+    #     "Connection": "keep-alive",
+    #     "Accept": "text/html",
+    #     "Referer": "https://www.in.gov.br/leiturajornal?data=04-04-2022&secao=do3"
+    # }
+    # response_html = requests.get(f'{BASE_ATO_URL}{url_title}', headers=req_headers, timeout=50).text
+    response_html = request_get_html_plw(f'{BASE_ATO_URL}{url_title}')
     response_html.replace(os.linesep, '')
     soup = bs(response_html, 'html.parser')
     elements = soup.find_all(attrs={"class": "texto-dou"})
     if len(elements) == 1:
-        return elements[0]
+        return elements[0], True
     else:
+        other_elements = soup.find({"id": "conteudo"})
+        NOT_FOUND_STR = "O recurso requisitado não foi encontrado."
+        if len(str(other_elements)) > 0 and NOT_FOUND_STR in str(other_elements):
+            print('Conteúdo de ato inexistente ' + url_title)
+            return "", True
         print('Erro ao obter ato de URL ' + url_title)
-        return ""
+        return "", False
 
 def fetch_all_pubs_dia(date, DEST_PATH = "", secao="do1"):
     if find_date_in_processed_file(date, secao, 'diarios'):
@@ -252,13 +294,16 @@ def fetch_all_pubs_dia(date, DEST_PATH = "", secao="do1"):
     URL_STR = f'{MAIN_URL}data={date}&secao={secao}'
     JSON_PATH = DEST_PATH.replace('html', 'json') + '.json'
 
-    r = Request(URL_STR)
-    r.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36')
-    # r.add_header('Connection', 'keep-alive')
-    r.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7')
+    # r = Request(URL_STR)
+    # r.add_header('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36')
+    # # r.add_header('Connection', 'keep-alive')
+    # r.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7')
 
-    with urlopen(r) as base_html, open(DEST_PATH, 'wb') as f, open(JSON_PATH, 'w') as f_json:
-        f.write(base_html.read())
+    base_html = request_get_html_plw(URL_STR)
+
+    # with urlopen(r) as base_html, open(DEST_PATH, 'wb') as f, open(JSON_PATH, 'w') as f_json:
+    with open(DEST_PATH, 'w') as f, open(JSON_PATH, 'w') as f_json:
+        f.write(base_html)
 
     with open(DEST_PATH, 'r') as o_file, open(JSON_PATH, 'w') as f_json:
         content = o_file.read()
@@ -267,6 +312,17 @@ def fetch_all_pubs_dia(date, DEST_PATH = "", secao="do1"):
         f_json.write(split2[0])
 
     create_atos_dir(date, secao)
+
+def request_get_html_plw(URL_STR):
+    html = ""
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(URL_STR, wait_until="load")
+        # page.once("load", lambda: print("page loaded!"))
+        html = page.content()
+        browser.close()
+    return html
 
 def create_atos_dir(date, jornal):
     path = get_html_atos_files_path(date, jornal)
@@ -277,7 +333,7 @@ def create_atos_dir(date, jornal):
 def get_html_atos_files_path(date, jornal):
     return f'./html_files/atos/{date}-{jornal}'
 
-class DonwloadWorker(Thread):
+class DiarioDownloaderWorker(Thread):
     def __init__(self, queue):
         Thread.__init__(self)
         self.queue = queue
@@ -285,47 +341,73 @@ class DonwloadWorker(Thread):
     def run(self):
         while True:
             # diarios
-            # DATE_LINE_SEP, FILE_PATH, secao = self.queue.get()
+            DATE_LINE_SEP, FILE_PATH, secao = self.queue.get()
 
-            # atos
-            # ato, HTML_ATOS_DIR_PATH, message_prefix = self.queue.get()
-
-            # csv
-            DATE_LINE_SEP = self.queue.get()
             try:
                 # diarios
-                # print(f'{DATE_LINE_SEP} - {secao} -->> Iniciado!')
-                # fetch_all_pubs_dia(DATE_LINE_SEP, FILE_PATH, secao)
-                # print(f'{DATE_LINE_SEP} - {secao} <<-- Download concluído!')
-
-                # atos
-                # print(f'{message_prefix} -->> Iniciado!')
-                # single_ato_to_file(ato, HTML_ATOS_DIR_PATH)
-                # print(f'{message_prefix} <<-- Download concluído!')
-
-                # csv
-                print(f'{DATE_LINE_SEP} -->> Iniciado!')
-                convert_atos_to_csv(DATE_LINE_SEP)
-                print(f'{DATE_LINE_SEP} <<-- Download concluído!')
+                print(f'{DATE_LINE_SEP} - {secao} -->> Iniciado!')
+                fetch_all_pubs_dia(DATE_LINE_SEP, FILE_PATH, secao)
+                print(f'{DATE_LINE_SEP} - {secao} <<-- Download concluído!')
+                # write_processed_date()
             except Exception as e:
                 print(e)
                 with open('./error.txt', 'a') as error_file:
-                    # error_file.write(f'Erro! - {DATE_LINE_SEP} - {secao}\n\n')
-                    # error_file.write(f'Erro! - {message_prefix}\n{e}\n\n')
-                    error_file.write(f'Erro! - {DATE_LINE_SEP}')
+                    error_file.write(f'Erro! - {DATE_LINE_SEP} - {secao}\n\n')
             finally:
                 self.queue.task_done()
 
 
+class AtoDownloaderWorker(Thread):
+    def __init__(self, queue):
+        Thread.__init__(self)
+        self.queue = queue
+
+    def run(self):
+        while True:
+            # atos
+            ato, HTML_ATOS_DIR_PATH, message_prefix = self.queue.get()
+
+            try:
+                # atos
+                single_ato_to_file(ato, HTML_ATOS_DIR_PATH, message_prefix)
+            except Exception as e:
+                print(e)
+                with open('./error.txt', 'a') as error_file:
+                    error_file.write(f'Erro! - {message_prefix}\n{e}\n\n')
+            finally:
+                self.queue.task_done()
+
+class CSVBuilderWorker(Thread):
+    def __init__(self, queue):
+        Thread.__init__(self)
+        self.queue = queue
+
+    def run(self):
+        while True:
+            # csv
+            DATE_LINE_SEP = self.queue.get()
+            try:
+                # csv
+                print(f'{DATE_LINE_SEP} -->> Iniciado!')
+                convert_atos_to_csv(DATE_LINE_SEP)
+                print(f'{DATE_LINE_SEP} <<-- Download concluído!')
+                
+            except Exception as e:
+                print(e)
+                with open('./error.txt', 'a') as error_file:
+                    error_file.write(f'Erro! - {DATE_LINE_SEP}')
+            finally:
+                self.queue.task_done()
+
 def main_diarios():
     ts = time()
     # dates_list = generate_dates()
-    dates_list = ["06/04/2022"]
+    dates_list = ["20/03/2023"]
 
     queue = Queue()
 
-    for x in range(100):
-        worker = DonwloadWorker(queue)
+    for x in range(5):
+        worker = DiarioDownloaderWorker(queue)
         worker.daemon = True
         worker.start()
 
@@ -349,14 +431,15 @@ def main_diarios():
 def main_atos():
     ts = time()
     # dates_list = generate_dates()
-    dates_list = ["06/04/2022"]
+    dates_list = ["20/03/2023"]
 
     queue = Queue()
 
-    for x in range(500):
-        worker = DonwloadWorker(queue)
+    for x in range(20):
+        worker = AtoDownloaderWorker(queue)
         worker.daemon = True
         worker.start()
+
 
     for date in dates_list:
         for secao in SECOES_DOU:
@@ -365,6 +448,13 @@ def main_atos():
 
             
     queue.join()
+
+    for date in dates_list:
+        DATE_LINE_SEP = date.replace("/","-")
+        for secao in SECOES_DOU:
+            while validate_atos_processed(DATE_LINE_SEP, secao, queue):
+                queue.join()
+    
 
     for date in dates_list:
             DATE_LINE_SEP = date.replace("/","-")
@@ -382,7 +472,7 @@ def main_csv():
     queue = Queue()
 
     for x in range(100):
-        worker = DonwloadWorker(queue)
+        worker = CSVBuilderWorker(queue)
         worker.daemon = True
         worker.start()
 
@@ -402,5 +492,5 @@ def main_csv():
 
 if __name__ == '__main__':   
     # main_diarios()
-    # main_atos()
-    main_csv()
+    main_atos()
+    # main_csv()
