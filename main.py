@@ -31,8 +31,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/06/2022"
-end_date = "31/10/2022"
+start_date = "01/01/2022"
+end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -220,8 +220,9 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
         
         queue.join()
         has_unprocessed_registry = True
-        print("Esperando conclusão de operações pendentes...")
-        sleep(3)
+        # print("Esperando conclusão de operações pendentes...")
+        # sleep(3)
+        num_of_swipes = 0
         while has_unprocessed_registry:
             has_unprocessed_registry = False
             atos_para_processamento = 0
@@ -229,8 +230,11 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
                 if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
                     queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
                     has_unprocessed_registry = True
+                    if num_of_swipes > 2:
+                        queue.join()
                 atos_para_processamento += 1
             queue.join()
+            num_of_swipes += 1
 
 def validate_atos_processed(date = '02-02-2022', jornal = 'do1', queue = Queue()):
     JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
@@ -357,7 +361,7 @@ def request_get_html_plw(URL_STR, is_full_diario = False):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto(URL_STR, wait_until="load")
+        page.goto(URL_STR, wait_until="load", timeout = 0)
         if is_full_diario:
             page.waitForSelector("div.portlet-boundary_leituradou_")
         # page.once("load", lambda: print("page loaded!"))
