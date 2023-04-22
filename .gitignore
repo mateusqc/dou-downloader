@@ -2,3 +2,4 @@ html_files
 csv_files
 json_files
 *.txt
+*.csv

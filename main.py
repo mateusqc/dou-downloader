@@ -13,10 +13,12 @@ from gazpacho import Soup
 from threading import Thread
 from queue import Queue
 from urllib.request import urlopen, Request
-
+import pandas as pd
 import socket
 from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
+
+import random
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -27,8 +29,7 @@ HTTPConnection.default_socket_options = (
     ]
 )
 
-
-
+random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
 start_date = "01/11/2022"
@@ -68,12 +69,16 @@ def generate_dates(start=start_date, end=end_date):
     dates_set = set()
 
     for date in interval:
-        dates_set.add(date.strftime('%d/%m/%Y'))
+        dates_set.add(date.strftime('%Y-%m-%d'))
 
     date_list = list(dates_set)
-    date_list.sort()
+    date_list.sort(reverse=True)
 
     return date_list
+
+def revert_date_srt(date_str, separator = "-"):
+    splitted = date_str.split(separator)
+    return splitted[-1] + separator + splitted[1] + separator + splitted[0]
 
 def get_process_tracking_file_from_action(action):
     if action == 'diarios':
@@ -156,7 +161,13 @@ def get_html_from_pub_order(date, jornal, id):
         content = file.read()
     return content
 
-def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue()):
+def get_num_samples_from_date(date = "06-04-2022"):
+    reversed_date = revert_date_srt(date)
+    atos_tributarios = pd.read_csv("./atos_dou_completo_dt_formatted.csv")
+    num_atos = len(atos_tributarios[atos_tributarios['dataPublicacao'] == reversed_date])
+    return num_atos
+
+def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), sample_mode = False):
     if find_date_in_processed_file(date, jornal, 'atos'):
         print(f'{date} - {jornal} - Já processado!')
         return
@@ -186,14 +197,36 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue()):
         if "uuid" not in ato:
             ato["uuid"] = str(uuid.uuid4())
             uuid_was_added = True
-        queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
-        atos_para_processamento += 1
-
+        if not sample_mode:
+            queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
+            atos_para_processamento += 1
+    
     parsed_json["jsonArray"] = atos
 
     if uuid_was_added:
         with open(JSON_FILE_PATH, 'w') as json_file:
             json.dump(parsed_json, json_file)
+    
+    if sample_mode and total_atos > 0:
+        num_atos = get_num_samples_from_date(date)
+        total_atos = num_atos*2 if num_atos > 0 else 5
+        atos = random.choices(atos, k=total_atos)
+        for ato in atos:
+            queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
+            atos_para_processamento += 1
+        
+        queue.join()
+        has_unprocessed_registry = True
+
+        while has_unprocessed_registry:
+            has_unprocessed_registry = False
+            atos_para_processamento = 0
+            for ato in atos:
+                if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
+                    queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
+                    has_unprocessed_registry = True
+                atos_para_processamento += 1
+            queue.join()
 
 def validate_atos_processed(date = '02-02-2022', jornal = 'do1', queue = Queue()):
     JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
@@ -361,9 +394,12 @@ class DiarioDownloaderWorker(Thread):
 
 
 class AtoDownloaderWorker(Thread):
-    def __init__(self, queue):
+    is_sample_mode = False
+
+    def __init__(self, queue, sample_mode = False):
         Thread.__init__(self)
         self.queue = queue
+        self.is_sample_mode = sample_mode
 
     def run(self):
         while True:
@@ -416,14 +452,14 @@ def main_diarios():
 
     for date in dates_list:
         for secao in SECOES_DOU:
-            DATE_LINE_SEP = date.replace("/","-")
+            DATE_LINE_SEP = revert_date_srt(date)
             FILE_PATH = BASE_HTML_DIR + f'{DATE_LINE_SEP}-{secao}'
             queue.put((DATE_LINE_SEP, FILE_PATH, secao))
             
     queue.join()  
 
     for date in dates_list:
-            DATE_LINE_SEP = date.replace("/","-")
+            DATE_LINE_SEP = revert_date_srt(date)
             for secao in SECOES_DOU:
                 FILE_PATH = BASE_HTML_DIR + f'{DATE_LINE_SEP}-{secao}'
                 while not find_date_in_processed_file(DATE_LINE_SEP, secao, 'diarios'):
@@ -433,7 +469,7 @@ def main_diarios():
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts))
 
-def main_atos():
+def main_atos(sample_mode = False):
     ts = time()
     dates_list = generate_dates()
     # dates_list = ["20/03/2023"]
@@ -441,28 +477,28 @@ def main_atos():
     queue = Queue()
 
     for x in range(20):
-        worker = AtoDownloaderWorker(queue)
+        worker = AtoDownloaderWorker(queue, sample_mode)
         worker.daemon = True
         worker.start()
 
 
     for date in dates_list:
         for secao in SECOES_DOU:
-            DATE_LINE_SEP = date.replace("/","-")
-            fetch_atos_from_json(DATE_LINE_SEP, secao, queue)
+            DATE_LINE_SEP = revert_date_srt(date)
+            fetch_atos_from_json(DATE_LINE_SEP, secao, queue, sample_mode)
 
-            
-    queue.join()
+    if not sample_mode:            
+        queue.join()
 
-    for date in dates_list:
-        DATE_LINE_SEP = date.replace("/","-")
-        for secao in SECOES_DOU:
-            while validate_atos_processed(DATE_LINE_SEP, secao, queue):
-                queue.join()
+        for date in dates_list:
+            DATE_LINE_SEP = revert_date_srt(date)
+            for secao in SECOES_DOU:
+                while validate_atos_processed(DATE_LINE_SEP, secao, queue):
+                    queue.join()
     
 
     for date in dates_list:
-            DATE_LINE_SEP = date.replace("/","-")
+            DATE_LINE_SEP = revert_date_srt(date)
             for secao in SECOES_DOU:
                 write_processed_date(DATE_LINE_SEP, secao, 'atos')
                 
@@ -482,13 +518,13 @@ def main_csv():
         worker.start()
 
     for date in dates_list:
-        DATE_LINE_SEP = date.replace("/","-")
+        DATE_LINE_SEP = revert_date_srt(date)
         queue.put((DATE_LINE_SEP))
             
     queue.join()
 
     for date in dates_list:
-            DATE_LINE_SEP = date.replace("/","-")
+            DATE_LINE_SEP = revert_date_srt(date)
             for secao in SECOES_DOU:
                 write_processed_date(DATE_LINE_SEP, secao, 'csv')
                 
@@ -496,6 +532,6 @@ def main_csv():
     print('Finalizado em %s', time() - ts)
 
 if __name__ == '__main__':   
-    main_diarios()
-    # main_atos()
+    # main_diarios()
+    main_atos(True)
     # main_csv()
