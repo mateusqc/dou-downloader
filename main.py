@@ -4,7 +4,7 @@ import requests
 import json
 from bs4 import BeautifulSoup as bs
 import re
-from time import time
+from time import time, sleep
 from datetime import datetime
 from datetime import timedelta
 import uuid
@@ -17,7 +17,6 @@ import pandas as pd
 import socket
 from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
-
 import random
 
 HTTPConnection.default_socket_options = (
@@ -32,8 +31,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/11/2022"
-end_date = "30/11/2022"
+start_date = "01/06/2022"
+end_date = "31/10/2022"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -217,7 +216,8 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
         
         queue.join()
         has_unprocessed_registry = True
-
+        print("Esperando conclusão de operações pendentes...")
+        sleep(3)
         while has_unprocessed_registry:
             has_unprocessed_registry = False
             atos_para_processamento = 0
