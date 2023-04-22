@@ -106,14 +106,18 @@ def find_date_in_processed_file(date, secao, action):
             return False
 
 def find_uuid_in_processed(id, path):
-    with open(path, 'r') as file:
-        s = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
-        b = bytearray()
-        b.extend(map(ord, str(id)))
-        if s.find(b) != -1:
-            return True
-        else:
-            return False
+    try:
+        with open(path, 'r') as file:
+            s = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
+            b = bytearray()
+            b.extend(map(ord, str(id)))
+            if s.find(b) != -1:
+                return True
+            else:
+                return False
+    except:
+        print("Erro ao ler arquivo: " + path)
+        return False
 
 def convert_atos_to_csv(date = '02-02-2022'):
     CSV_FILE_PATH = BASE_CSV_DIR + date + '.csv'
@@ -242,7 +246,7 @@ def validate_atos_processed(date = '02-02-2022', jornal = 'do1', queue = Queue()
     atos = parsed_json["jsonArray"]
 
     total_atos = len(atos)
-    atos_para_processamento = 0
+    atos_para_processamento = 1
 
     if total_atos == 0:
         print(f'\t{date} - {jornal} - Sem publicações!')
