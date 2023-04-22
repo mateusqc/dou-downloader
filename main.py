@@ -232,6 +232,8 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
                     has_unprocessed_registry = True
                     if num_of_swipes > 2:
                         queue.join()
+                        sleep(3)
+                        print("Aguardando para evitar bloqueio de requisição...")
                 atos_para_processamento += 1
             queue.join()
             num_of_swipes += 1
@@ -319,9 +321,8 @@ def fetch_ato_content(url_title):
     if len(elements) == 1:
         return elements[0], True
     else:
-        other_elements = soup.find({"id": "conteudo"})
         NOT_FOUND_STR = "O recurso requisitado não foi encontrado."
-        if len(str(other_elements)) > 0 and NOT_FOUND_STR in str(other_elements):
+        if len(str(soup)) > 0 and NOT_FOUND_STR in str(soup):
             print('Conteúdo de ato inexistente ' + url_title)
             return "", True
         print('Erro ao obter ato de URL ' + url_title)
@@ -494,6 +495,7 @@ def main_atos(sample_mode = False):
         for secao in SECOES_DOU:
             DATE_LINE_SEP = revert_date_srt(date)
             fetch_atos_from_json(DATE_LINE_SEP, secao, queue, sample_mode)
+            write_processed_date(DATE_LINE_SEP, secao, 'atos')
 
     if not sample_mode:            
         queue.join()
@@ -505,10 +507,10 @@ def main_atos(sample_mode = False):
                     queue.join()
     
 
-    for date in dates_list:
-            DATE_LINE_SEP = revert_date_srt(date)
-            for secao in SECOES_DOU:
-                write_processed_date(DATE_LINE_SEP, secao, 'atos')
+        for date in dates_list:
+                DATE_LINE_SEP = revert_date_srt(date)
+                for secao in SECOES_DOU:
+                    write_processed_date(DATE_LINE_SEP, secao, 'atos')
                 
     print('Processamento concluído!')
     print('Finalizado em %s', time() - ts)
