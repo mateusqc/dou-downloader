@@ -9,7 +9,7 @@ from datetime import datetime
 from datetime import timedelta
 import uuid
 import os
-from gazpacho import Soup
+# from gazpacho import Soup
 from threading import Thread
 from queue import Queue
 from urllib.request import urlopen, Request
