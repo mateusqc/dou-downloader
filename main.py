@@ -31,8 +31,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/01/2022"
-end_date = "31/05/2022"
+start_date = "01/01/2012"
+end_date = "31/12/2020"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -232,8 +232,8 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
                     has_unprocessed_registry = True
                     if num_of_swipes > 2:
                         queue.join()
-                        sleep(3)
-                        print("Aguardando para evitar bloqueio de requisição...")
+                        sleep(num_of_swipes)
+                        print(f"Aguardando {num_of_swipes}s para evitar bloqueio de requisição...")
                 atos_para_processamento += 1
             queue.join()
             num_of_swipes += 1
