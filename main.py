@@ -33,6 +33,8 @@ random.seed(47)
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
 start_date = "01/01/2012"
 end_date = "31/12/2020"
+# start_date = "01/01/2022"
+# end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
 BASE_JSON_DIR = './json_files/'
 BASE_HTML_DIR = './html_files/'
@@ -513,7 +515,7 @@ def main_atos(sample_mode = False):
                     write_processed_date(DATE_LINE_SEP, secao, 'atos')
                 
     print('Processamento concluído!')
-    print('Finalizado em %s', time() - ts)
+    print('Finalizado em ' + (time() - ts) + 's')
 
 def main_csv():
     ts = time()
