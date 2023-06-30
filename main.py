@@ -31,8 +31,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/01/2012"
-end_date = "31/12/2020"
+start_date = "01/01/2013"
+end_date = "31/12/2022"
 # start_date = "01/01/2022"
 # end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
@@ -220,25 +220,26 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
             queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
             atos_para_processamento += 1
         
+    queue.join()
+    has_unprocessed_registry = True
+    # print("Esperando conclusão de operações pendentes...")
+    # sleep(3)
+    num_of_swipes = 0
+    while has_unprocessed_registry:
+        has_unprocessed_registry = False
+        atos_para_processamento = 0
+        for ato in atos:
+            if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
+                queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
+                has_unprocessed_registry = True
+                if num_of_swipes > 3:
+                    queue.join()
+                    print(f"Aguardando 5 min para evitar bloqueio de requisição...")
+                    sleep(300)
+                    num_of_swipes = 0
+            atos_para_processamento += 1
         queue.join()
-        has_unprocessed_registry = True
-        # print("Esperando conclusão de operações pendentes...")
-        # sleep(3)
-        num_of_swipes = 0
-        while has_unprocessed_registry:
-            has_unprocessed_registry = False
-            atos_para_processamento = 0
-            for ato in atos:
-                if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
-                    queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
-                    has_unprocessed_registry = True
-                    if num_of_swipes > 2:
-                        queue.join()
-                        sleep(num_of_swipes)
-                        print(f"Aguardando {num_of_swipes}s para evitar bloqueio de requisição...")
-                atos_para_processamento += 1
-            queue.join()
-            num_of_swipes += 1
+        num_of_swipes += 1
 
 def validate_atos_processed(date = '02-02-2022', jornal = 'do1', queue = Queue()):
     JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
@@ -499,23 +500,23 @@ def main_atos(sample_mode = False):
             fetch_atos_from_json(DATE_LINE_SEP, secao, queue, sample_mode)
             write_processed_date(DATE_LINE_SEP, secao, 'atos')
 
-    if not sample_mode:            
-        queue.join()
+    # if not sample_mode:            
+    #     queue.join()
 
-        for date in dates_list:
-            DATE_LINE_SEP = revert_date_srt(date)
-            for secao in SECOES_DOU:
-                while validate_atos_processed(DATE_LINE_SEP, secao, queue):
-                    queue.join()
+    #     for date in dates_list:
+    #         DATE_LINE_SEP = revert_date_srt(date)
+    #         for secao in SECOES_DOU:
+    #             while validate_atos_processed(DATE_LINE_SEP, secao, queue):
+    #                 queue.join()
     
 
-        for date in dates_list:
-                DATE_LINE_SEP = revert_date_srt(date)
-                for secao in SECOES_DOU:
-                    write_processed_date(DATE_LINE_SEP, secao, 'atos')
+    #     for date in dates_list:
+    #             DATE_LINE_SEP = revert_date_srt(date)
+    #             for secao in SECOES_DOU:
+    #                 write_processed_date(DATE_LINE_SEP, secao, 'atos')
                 
     print('Processamento concluído!')
-    print('Finalizado em ' + (time() - ts) + 's')
+    print('Finalizado em ' + str(time() - ts) + 's')
 
 def main_csv():
     ts = time()
@@ -541,9 +542,9 @@ def main_csv():
                 write_processed_date(DATE_LINE_SEP, secao, 'csv')
                 
     print('Processamento concluído!')
-    print('Finalizado em %s', time() - ts)
+    print('Finalizado em ' + str(time() - ts))
 
 if __name__ == '__main__':   
     # main_diarios()
-    main_atos(True)
+    main_atos()
     # main_csv()
