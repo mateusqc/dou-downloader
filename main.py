@@ -122,40 +122,54 @@ def find_uuid_in_processed(id, path):
         return False
 
 def convert_atos_to_csv(date = '02-02-2022'):
+    initial = f'01/01/{date}'
+    final = f'31/12/{date}'
+    dates_year = generate_dates(initial, final)
+
     CSV_FILE_PATH = BASE_CSV_DIR + date + '.csv'
     csv_file = open(CSV_FILE_PATH, 'w')
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(CSV_COLS)
 
-    for jornal in SECOES_DOU:
-        if find_date_in_processed_file(date, jornal, 'csv'):
-            print(f'{date} - {jornal} - Já processado!')
-            csv_file.close()
-            return
-        
-        JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
+    for date_unreversed in dates_year:
+        date = revert_date_srt(str(date_unreversed))    
+        for jornal in SECOES_DOU:
+            if find_date_in_processed_file(date, jornal, 'csv'):
+                print(f'{date} - {jornal} - Já processado!')
+                # csv_file.close()
+                continue
+            
+            JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
 
-        parsed_json = {}
+            parsed_json = {}
 
-        with open(JSON_FILE_PATH, 'r') as json_file:
-            json_content = json_file.read()
-            parsed_json = json.loads(json_content)
-            json_file.close()
+            with open(JSON_FILE_PATH, 'r') as json_file:
+                json_content = json_file.read()
+                parsed_json = json.loads(json_content)
+                json_file.close()
 
-        atos = parsed_json["jsonArray"]
+            atos = parsed_json["jsonArray"]
 
+            total_atos = len(atos)
 
-        total_atos = len(atos)
+            if total_atos == 0:
+                print(f'\t{date} - {jornal} - Sem publicações!')
+                continue
 
-        if total_atos == 0:
-            print(f'\t{date} - {jornal} - Sem publicações!')
-            continue
+            for ato in atos:
+                ato_id = ato["uuid"]
+                HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
 
-        for ato in atos:
-            content_full = get_html_from_pub_order(date, jornal, ato["uuid"])
-            ato["content_full"] = content_full
-            conteudo = convert_to_csv_row(ato)
-            csv_writer.writerow(conteudo)
+                if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
+                    print(f"File {ato_id} missing.")
+                    continue
+                else:
+                    print(f"File {ato_id} found!")
+
+                content_full = get_html_from_pub_order(date, jornal, ato_id)
+                ato["content_full"] = content_full
+                conteudo = convert_to_csv_row(ato)
+                csv_writer.writerow(conteudo)
 
     csv_file.close()
 
@@ -380,7 +394,8 @@ def create_atos_dir(date, jornal):
         os.makedirs(path)
 
 def get_html_atos_files_path(date, jornal):
-    return f'./html_files/atos/{date}-{jornal}'
+    return f'./html_files/atos/{date}-{jornal}'   
+
 
 class DiarioDownloaderWorker(Thread):
     def __init__(self, queue):
@@ -520,8 +535,8 @@ def main_atos(sample_mode = False):
 
 def main_csv():
     ts = time()
-    # dates_list = generate_dates()
-    dates_list = ["06/04/2022"]
+    dates_list = generate_dates()
+    # dates_list = ["06/04/2022"]
 
     queue = Queue()
 
@@ -530,8 +545,10 @@ def main_csv():
         worker.daemon = True
         worker.start()
 
-    for date in dates_list:
-        DATE_LINE_SEP = revert_date_srt(date)
+    # for date in dates_list:
+    for year in range(2013, 2022):
+        # DATE_LINE_SEP = revert_date_srt(str(year))
+        DATE_LINE_SEP = str(year)
         queue.put((DATE_LINE_SEP))
             
     queue.join()
