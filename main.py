@@ -32,7 +32,7 @@ random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
 start_date = "01/01/2013"
-end_date = "30/11/2022"
+end_date = "31/12/2022"
 # start_date = "01/01/2022"
 # end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
@@ -232,10 +232,11 @@ def fetch_atos_from_json(date = '02-02-2022', jornal = 'do1', queue = Queue(), s
             if not find_uuid_in_processed(ato["uuid"], HTML_ATOS_DIR_PATH + 'processed.txt'):
                 queue.put((ato, HTML_ATOS_DIR_PATH, f'{date} - {jornal} - {atos_para_processamento} de {total_atos}'))
                 has_unprocessed_registry = True
-                if num_of_swipes > 2:
+                if num_of_swipes > 3:
                     queue.join()
-                    sleep(num_of_swipes)
-                    print(f"Aguardando {num_of_swipes}s para evitar bloqueio de requisição...")
+                    print(f"Aguardando 5 min para evitar bloqueio de requisição...")
+                    sleep(300)
+                    num_of_swipes = 0
             atos_para_processamento += 1
         queue.join()
         num_of_swipes += 1
