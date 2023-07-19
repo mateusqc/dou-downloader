@@ -31,8 +31,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/01/2013"
-end_date = "31/12/2022"
+start_date = "18/07/2023"
+end_date = "18/07/2023"
 # start_date = "01/01/2022"
 # end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
@@ -122,8 +122,8 @@ def find_uuid_in_processed(id, path):
         return False
 
 def convert_atos_to_csv(date = '02-02-2022'):
-    initial = f'01/01/{date}'
-    final = f'31/12/{date}'
+    initial = f'18/07/{date}' #ToDo
+    final = f'18/07/{date}' #ToDo
     dates_year = generate_dates(initial, final)
 
     CSV_FILE_PATH = BASE_CSV_DIR + date + '.csv'
@@ -546,7 +546,7 @@ def main_csv():
         worker.start()
 
     # for date in dates_list:
-    for year in range(2013, 2022):
+    for year in range(2023, 2024): ##ToDo
         # DATE_LINE_SEP = revert_date_srt(str(year))
         DATE_LINE_SEP = str(year)
         queue.put((DATE_LINE_SEP))
@@ -562,6 +562,6 @@ def main_csv():
     print('Finalizado em ' + str(time() - ts))
 
 if __name__ == '__main__':   
-    # main_diarios()
-    main_atos()
-    # main_csv()
+    #main_diarios()
+    # main_atos()
+    main_csv()

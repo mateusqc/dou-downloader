@@ -5,3 +5,4 @@ json_files
 *.csv
 *.zip
 *.tar.xz
+!requirements.txt
