@@ -18,6 +18,7 @@ import socket
 from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
 import random
+import sys
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -465,9 +466,9 @@ class CSVBuilderWorker(Thread):
             finally:
                 self.queue.task_done()
 
-def main_diarios():
+def main_diarios(date_1, date_2):
     ts = time()
-    dates_list = generate_dates()
+    dates_list = generate_dates(date_1, date_2)
     # dates_list = ["20/03/2023"]
 
     queue = Queue()
@@ -561,7 +562,27 @@ def main_csv():
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts))
 
+def is_valid_dates(date1,date2):
+    try:
+        d1 = datetime.strptime(date1, '%d/%m/%Y')
+        d2 = datetime.strptime(date2, '%d/%m/%Y')
+        return d2 >= d1
+    except ValueError:
+        return False
+
 if __name__ == '__main__':   
-    #main_diarios()
-    # main_atos()
-    main_csv()
+    params = sys.argv[1:]
+    if len(params) == 0:
+        main_diarios(start_date,end_date)
+        # main_atos()
+        # main_csv()
+    elif len(params) == 1 and is_valid_dates(params[0],params[0]):
+        main_diarios(params[0],params[0])
+        # main_atos()
+        # main_csv()
+    elif len(params) == 2 and is_valid_dates(params[0],params[1]):
+        main_diarios(params[0],params[1])
+        # main_atos()
+        # main_csv()
+    else:
+        print('Parametros de data inválidos')
