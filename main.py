@@ -32,8 +32,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "18/07/2023"
-end_date = "18/07/2023"
+start_date = "17/07/2023"
+end_date = "17/07/2023"
 # start_date = "01/01/2022"
 # end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
@@ -123,56 +123,47 @@ def find_uuid_in_processed(id, path):
         return False
 
 def convert_atos_to_csv(date = '02-02-2022'):
-    initial = f'18/07/{date}' #ToDo
-    final = f'18/07/{date}' #ToDo
-    dates_year = generate_dates(initial, final)
 
-    CSV_FILE_PATH = BASE_CSV_DIR + date + '.csv'
-    csv_file = open(CSV_FILE_PATH, 'w')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(CSV_COLS)
+    date_processing = revert_date_srt(str(date))    
+    for jornal in SECOES_DOU:
+        if find_date_in_processed_file(date_processing, jornal, 'csv'):
+            print(f'{date_processing} - {jornal} - Já processado!')
+            # csv_file.close()
+            continue
+        CSV_FILE_PATH = BASE_CSV_DIR + date_processing + '.csv'
+        csv_file = open(CSV_FILE_PATH, 'w')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(CSV_COLS)
+        JSON_FILE_PATH = BASE_JSON_DIR + date_processing + '-' + jornal + '.json'
+        parsed_json = {}
+        with open(JSON_FILE_PATH, 'r') as json_file:
+            json_content = json_file.read()
+            parsed_json = json.loads(json_content)
+            json_file.close()
 
-    for date_unreversed in dates_year:
-        date = revert_date_srt(str(date_unreversed))    
-        for jornal in SECOES_DOU:
-            if find_date_in_processed_file(date, jornal, 'csv'):
-                print(f'{date} - {jornal} - Já processado!')
-                # csv_file.close()
+        atos = parsed_json["jsonArray"]
+
+        total_atos = len(atos)
+
+        if total_atos == 0:
+            print(f'\t{date_processing} - {jornal} - Sem publicações!')
+            continue
+
+        for ato in atos:
+            ato_id = ato["uuid"]
+            HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date_processing + '-' + jornal + '/'
+            if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
+                print(f"File {ato_id} missing.")
                 continue
-            
-            JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
+            else:
+                print(f"File {ato_id} found!")
 
-            parsed_json = {}
+            content_full = get_html_from_pub_order(date_processing, jornal, ato_id)
+            ato["content_full"] = content_full
+            conteudo = convert_to_csv_row(ato)
+            csv_writer.writerow(conteudo)
 
-            with open(JSON_FILE_PATH, 'r') as json_file:
-                json_content = json_file.read()
-                parsed_json = json.loads(json_content)
-                json_file.close()
-
-            atos = parsed_json["jsonArray"]
-
-            total_atos = len(atos)
-
-            if total_atos == 0:
-                print(f'\t{date} - {jornal} - Sem publicações!')
-                continue
-
-            for ato in atos:
-                ato_id = ato["uuid"]
-                HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
-
-                if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
-                    print(f"File {ato_id} missing.")
-                    continue
-                else:
-                    print(f"File {ato_id} found!")
-
-                content_full = get_html_from_pub_order(date, jornal, ato_id)
-                ato["content_full"] = content_full
-                conteudo = convert_to_csv_row(ato)
-                csv_writer.writerow(conteudo)
-
-    csv_file.close()
+        csv_file.close()
 
 def get_html_from_pub_order(date, jornal, id):
     HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
@@ -466,9 +457,8 @@ class CSVBuilderWorker(Thread):
             finally:
                 self.queue.task_done()
 
-def main_diarios(date_1, date_2):
+def main_diarios(dates_list):
     ts = time()
-    dates_list = generate_dates(date_1, date_2)
     # dates_list = ["20/03/2023"]
 
     queue = Queue()
@@ -497,9 +487,8 @@ def main_diarios(date_1, date_2):
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts))
 
-def main_atos(sample_mode = False):
+def main_atos(dates_list, sample_mode = False):
     ts = time()
-    dates_list = generate_dates()
     # dates_list = ["20/03/2023"]
 
     queue = Queue()
@@ -534,9 +523,8 @@ def main_atos(sample_mode = False):
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts) + 's')
 
-def main_csv():
+def main_csv(dates_list):
     ts = time()
-    dates_list = generate_dates()
     # dates_list = ["06/04/2022"]
 
     queue = Queue()
@@ -546,10 +534,8 @@ def main_csv():
         worker.daemon = True
         worker.start()
 
-    # for date in dates_list:
-    for year in range(2023, 2024): ##ToDo
-        # DATE_LINE_SEP = revert_date_srt(str(year))
-        DATE_LINE_SEP = str(year)
+    for date in dates_list:
+        DATE_LINE_SEP = str(date)
         queue.put((DATE_LINE_SEP))
             
     queue.join()
@@ -573,16 +559,19 @@ def is_valid_dates(date1,date2):
 if __name__ == '__main__':   
     params = sys.argv[1:]
     if len(params) == 0:
-        main_diarios(start_date,end_date)
-        # main_atos()
-        # main_csv()
+        date_list = generate_dates()
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
     elif len(params) == 1 and is_valid_dates(params[0],params[0]):
-        main_diarios(params[0],params[0])
-        # main_atos()
-        # main_csv()
+        date_list = generate_dates(params[0],params[0])
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
     elif len(params) == 2 and is_valid_dates(params[0],params[1]):
-        main_diarios(params[0],params[1])
-        # main_atos()
-        # main_csv()
+        date_list = generate_dates(params[0],params[1])
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
     else:
         print('Parametros de data inválidos')
