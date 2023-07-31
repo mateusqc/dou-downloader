@@ -157,17 +157,18 @@ def convert_atos_to_csv(date = '02-02-2022'):
                 continue
 
             for ato in atos:
-                ato_id = ato["uuid"]
-                HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
+                # ato_id = ato["uuid"]
+                # HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
 
-                if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
-                    print(f"File {ato_id} missing.")
-                    continue
-                else:
-                    print(f"File {ato_id} found!")
+                # if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
+                    # print(f"File {ato_id} missing.")
+                    # continue
+                # else:
+                    # print(f"File {ato_id} found!")
 
-                content_full = get_html_from_pub_order(date, jornal, ato_id)
-                ato["content_full"] = content_full
+                # content_full = get_html_from_pub_order(date, jornal, ato_id)
+                # ato["content_full"] = content_full
+                ato["content_full"] = ""
                 conteudo = convert_to_csv_row(ato)
                 csv_writer.writerow(conteudo)
 
@@ -563,5 +564,5 @@ def main_csv():
 
 if __name__ == '__main__':   
     # main_diarios()
-    main_atos()
-    # main_csv()
+    # main_atos()
+    main_csv()
