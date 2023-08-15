@@ -1,6 +1,7 @@
 html_files
 csv_files
 json_files
+matches_files
 *.txt
 *.csv
 *.zip
