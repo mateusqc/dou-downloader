@@ -1,0 +1,5 @@
+smmap==5.0.0
+beautifulsoup4==4.10.0
+playwright==1.32.1
+pandas==2.0.3
+numpy==1.24.4

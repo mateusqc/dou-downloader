@@ -1,23 +1,13 @@
 import mmap
-import csv
-import requests
-import json
 from bs4 import BeautifulSoup as bs
-import re
 from time import time, sleep
-from datetime import datetime
-from datetime import timedelta
-import uuid
 import os
 # from gazpacho import Soup
 from threading import Thread
 from queue import Queue
-from urllib.request import urlopen, Request
 import pandas as pd
-import socket
-from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
-import random
+import numpy as np
 
 processed_file_path = './matches_files/downloaded_uuids.txt'
 
@@ -112,12 +102,22 @@ class AtoDownloaderWorker(Thread):
             finally:
                 self.queue.task_done()
 
+def parse_processed_uuids():
+    newfile_path = './matches_files/downloaded_uuids_np.txt'
+    data = ""
+    with open(processed_file_path, 'r') as file:
+        data = file.read().strip().replace('\n', ',')
+    with open(newfile_path, 'w') as file:
+        file.write(data)
+    return np.loadtxt(newfile_path, dtype='str',delimiter=',')
+
+
 def fetch_atos():
     ts = time()
 
     queue = Queue()
 
-    for x in range(20):
+    for x in range(30):
         worker = AtoDownloaderWorker(queue)
         worker.daemon = True
         worker.start()
@@ -130,21 +130,29 @@ def fetch_atos():
     total_size = len(atos_df)
     total_count = 0
     curr_count = 0
-    curr_limit = 500
+    curr_limit = 5000
 
     print(" -> INICIANDO PROCESSAMENTO")
     while not is_finished:
         is_finished = True
 
-        for idx in atos_df.index:
+        print(" -> Lendo UUIDs já processados...")
+        processed_uuids = parse_processed_uuids()
+        print(f" -> UUIDs já processados lidos com sucesso! -> {len(processed_uuids)}")
+
+        filtered_df = atos_df[~atos_df["uuid"].isin(processed_uuids)]
+        
+        total_count = total_size - len(filtered_df)
+
+        for idx in filtered_df.index:
             total_count += 1
 
-            ato_uuid = atos_df.loc[idx]["uuid"]
+            ato_uuid = filtered_df.loc[idx]["uuid"]
             
             if not find_uuid_in_processed(ato_uuid):
                 is_finished = False
                 curr_count += 1
-                queue.put((ato_uuid, atos_df.loc[idx]["urlTitle"], total_count, total_size))
+                queue.put((ato_uuid, filtered_df.loc[idx]["urlTitle"], total_count, total_size))
             else:
                 percentage = total_count/total_size * 100
                 print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {ato_uuid} - Já processado!")
