@@ -99,8 +99,8 @@ class AtoDownloaderWorker(Thread):
                 print(e)
                 with open('./error.txt', 'a') as error_file:
                     error_file.write(f'Erro! - {ato_uuid} - {ato_url}\n{e}\n\n')
-            finally:
-                self.queue.task_done()
+            # finally:
+            #     self.queue.task_done()
 
 def parse_processed_uuids():
     newfile_path = './matches_files/downloaded_uuids_np.txt'
@@ -135,7 +135,7 @@ def fetch_atos():
     total_size = (finish_index - start_index) + 1
     total_count = 0
     curr_count = 0
-    curr_limit = 5000
+    curr_limit = 4000
 
 
     print(" -> INICIANDO PROCESSAMENTO")
@@ -146,7 +146,8 @@ def fetch_atos():
         processed_uuids = parse_processed_uuids()
         print(f" -> UUIDs já processados lidos com sucesso! -> {len(processed_uuids)}")
 
-        filtered_df = atos_df[~atos_df["uuid"].isin(processed_uuids)].iloc[start_index:finish_index]
+        filtered_df = atos_df.iloc[start_index:finish_index].copy()
+        filtered_df = filtered_df[~filtered_df["uuid"].isin(processed_uuids)]
         
         total_count = total_size - len(filtered_df)
 
