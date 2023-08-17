@@ -85,16 +85,16 @@ class AtoDownloaderWorker(Thread):
     def run(self):
         while True:
             # atos
-            ato_uuid, ato_url, total_count, total_size = self.queue.get()
+            ato_uuid, ato_url, total_count, total_size, slice, total_slices = self.queue.get()
             percentage = total_count/total_size * 100
 
             try:
                 if not find_uuid_in_processed(ato_uuid):
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {ato_uuid} -->> Download INICIADO!")
+                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} -->> Download INICIADO!")
                     attempt_download(ato_uuid, ato_url)
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {ato_uuid} <<-- Download concluído!")
+                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} <<-- Download concluído!")
                 else:
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {ato_uuid} - Já processado!")
+                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} - Já processado!")
             except Exception as e:
                 print(e)
                 with open('./error.txt', 'a') as error_file:
@@ -113,6 +113,11 @@ def parse_processed_uuids():
 
 
 def fetch_atos():
+    start_index = 0
+    finish_index = 328636
+    slice = 1
+    total_slices = 5
+
     ts = time()
 
     queue = Queue()
@@ -127,10 +132,11 @@ def fetch_atos():
     print(" -> CSV lido com sucesso!")
 
     is_finished = False
-    total_size = len(atos_df)
+    total_size = finish_index + 1
     total_count = 0
     curr_count = 0
     curr_limit = 5000
+
 
     print(" -> INICIANDO PROCESSAMENTO")
     while not is_finished:
@@ -140,7 +146,7 @@ def fetch_atos():
         processed_uuids = parse_processed_uuids()
         print(f" -> UUIDs já processados lidos com sucesso! -> {len(processed_uuids)}")
 
-        filtered_df = atos_df[~atos_df["uuid"].isin(processed_uuids)]
+        filtered_df = atos_df[~atos_df["uuid"].isin(processed_uuids)].iloc[start_index:finish_index]
         
         total_count = total_size - len(filtered_df)
 
@@ -152,10 +158,10 @@ def fetch_atos():
             if not find_uuid_in_processed(ato_uuid):
                 is_finished = False
                 curr_count += 1
-                queue.put((ato_uuid, filtered_df.loc[idx]["urlTitle"], total_count, total_size))
+                queue.put((ato_uuid, filtered_df.loc[idx]["urlTitle"], total_count, total_size, slice, total_slices))
             else:
                 percentage = total_count/total_size * 100
-                print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {ato_uuid} - Já processado!")
+                print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} - Já processado!")
 
             if curr_count >= curr_limit:
                 queue.join()
