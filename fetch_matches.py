@@ -113,10 +113,10 @@ def parse_processed_uuids():
 
 
 def fetch_atos():
-    start_index = 0
-    finish_index = 328636
-    slice = 1
-    total_slices = 5
+    start_index = 262910
+    finish_index = 525819
+    slice = 2
+    total_slices = 6
 
     ts = time()
 
@@ -132,7 +132,7 @@ def fetch_atos():
     print(" -> CSV lido com sucesso!")
 
     is_finished = False
-    total_size = finish_index + 1
+    total_size = (finish_index - start_index) + 1
     total_count = 0
     curr_count = 0
     curr_limit = 5000
