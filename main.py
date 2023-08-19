@@ -19,6 +19,8 @@ from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
 import random
 import sys
+from pre_process import pre_process_csv
+from utils import revert_date_srt
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -78,9 +80,9 @@ def generate_dates(start=start_date, end=end_date):
 
     return date_list
 
-def revert_date_srt(date_str, separator = "-"):
-    splitted = date_str.split(separator)
-    return splitted[-1] + separator + splitted[1] + separator + splitted[0]
+# def revert_date_srt(date_str, separator = "-"):
+#     splitted = date_str.split(separator)
+#     return splitted[-1] + separator + splitted[1] + separator + splitted[0]
 
 def get_process_tracking_file_from_action(action):
     if action == 'diarios':
@@ -563,15 +565,18 @@ if __name__ == '__main__':
         main_diarios(date_list)
         main_atos(date_list)
         main_csv(date_list)
+        pre_process_csv(date_list)
     elif len(params) == 1 and is_valid_dates(params[0],params[0]):
         date_list = generate_dates(params[0],params[0])
         main_diarios(date_list)
         main_atos(date_list)
         main_csv(date_list)
+        pre_process_csv(date_list)
     elif len(params) == 2 and is_valid_dates(params[0],params[1]):
         date_list = generate_dates(params[0],params[1])
         main_diarios(date_list)
         main_atos(date_list)
         main_csv(date_list)
+        pre_process_csv(date_list)
     else:
         print('Parametros de data inválidos')
