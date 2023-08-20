@@ -145,7 +145,7 @@ def fetch_atos():
     total_size = (finish_index - start_index) + 1
     total_count = 0
     curr_count = 0
-    curr_limit = 10000
+    curr_limit = 14000
 
 
     print(" -> INICIANDO PROCESSAMENTO")
