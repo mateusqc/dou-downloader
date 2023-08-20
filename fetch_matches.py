@@ -8,6 +8,7 @@ from queue import Queue
 import pandas as pd
 from playwright.sync_api import sync_playwright
 import numpy as np
+import urllib.request
 
 processed_file_path = './matches_files/downloaded_uuids.txt'
 
@@ -41,9 +42,17 @@ def request_get_html_plw(URL_STR):
         browser.close()
     return html
 
+
+def request_get_html(URL_STR):
+    html = ""
+    with urllib.request.urlopen(URL_STR, timeout=15) as response:
+        html = response.read().decode('utf-8')
+    return html
+
 def fetch_ato_content(url_title):
     BASE_ATO_URL = "https://www.in.gov.br/web/dou/-/"
-    response_html = request_get_html_plw(f'{BASE_ATO_URL}{url_title}')
+    # response_html = request_get_html_plw(f'{BASE_ATO_URL}{url_title}')
+    response_html = request_get_html(f'{BASE_ATO_URL}{url_title}')
     response_html.replace(os.linesep, '')
     soup = bs(response_html, 'html.parser')
     elements = soup.find_all(attrs={"class": "texto-dou"})
@@ -76,31 +85,32 @@ def attempt_download(ato_uuid, ato_url):
 
 
 class AtoDownloaderWorker(Thread):
-    is_sample_mode = False
+    worker_num = None
 
-    def __init__(self, queue):
+    def __init__(self, queue, worker_num):
         Thread.__init__(self)
         self.queue = queue
+        self.worker_num = worker_num
 
     def run(self):
         while True:
             # atos
-            ato_uuid, ato_url, total_count, total_size, slice, total_slices = self.queue.get()
+            ato_uuid, ato_url, total_count, total_size, slice_num, total_slices = self.queue.get()
             percentage = total_count/total_size * 100
 
             try:
                 if not find_uuid_in_processed(ato_uuid):
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} -->> Download INICIADO!")
+                    print(f"[W_{'%2d' % self.worker_num}] {total_count}/{total_size} ({'%.2f' % percentage}%) - {slice_num}/{total_slices} - {ato_uuid} -->> Download INICIADO!")
                     attempt_download(ato_uuid, ato_url)
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} <<-- Download concluído!")
+                    print(f"[W_{'%2d' % self.worker_num}] {total_count}/{total_size} ({'%.2f' % percentage}%) - {slice_num}/{total_slices} - {ato_uuid} <<-- Download concluído!")
                 else:
-                    print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} - Já processado!")
+                    print(f"[W_{'%2d' % self.worker_num}] {total_count}/{total_size} ({'%.2f' % percentage}%) - {slice_num}/{total_slices} - {ato_uuid} - Já processado!")
             except Exception as e:
-                print(e)
+                print(f"[W_{'%2d' % self.worker_num}] ############## ERRO!\n", e)
                 with open('./error.txt', 'a') as error_file:
                     error_file.write(f'Erro! - {ato_uuid} - {ato_url}\n{e}\n\n')
-            # finally:
-            #     self.queue.task_done()
+            finally:
+                self.queue.task_done()
 
 def parse_processed_uuids():
     newfile_path = './matches_files/downloaded_uuids_np.txt'
@@ -115,15 +125,15 @@ def parse_processed_uuids():
 def fetch_atos():
     start_index = 262910
     finish_index = 525819
-    slice = 2
+    slice_num = 2
     total_slices = 6
 
     ts = time()
 
     queue = Queue()
 
-    for x in range(30):
-        worker = AtoDownloaderWorker(queue)
+    for x in range(40):
+        worker = AtoDownloaderWorker(queue, x)
         worker.daemon = True
         worker.start()
 
@@ -159,10 +169,10 @@ def fetch_atos():
             if not find_uuid_in_processed(ato_uuid):
                 is_finished = False
                 curr_count += 1
-                queue.put((ato_uuid, filtered_df.loc[idx]["urlTitle"], total_count, total_size, slice, total_slices))
+                queue.put((ato_uuid, filtered_df.loc[idx]["urlTitle"], total_count, total_size, slice_num, total_slices))
             else:
                 percentage = total_count/total_size * 100
-                print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice}/{total_slices} - {ato_uuid} - Já processado!")
+                print(f"{total_count}/{total_size} ({'%.2f' % percentage}%) - {slice_num}/{total_slices} - {ato_uuid} - Já processado!")
 
             if curr_count >= curr_limit:
                 queue.join()
