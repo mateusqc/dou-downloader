@@ -2,15 +2,23 @@ import mmap
 from bs4 import BeautifulSoup as bs
 from time import time, sleep
 import os
-# from gazpacho import Soup
+import csv
 from threading import Thread
 from queue import Queue
 import pandas as pd
 from playwright.sync_api import sync_playwright
 import numpy as np
 import urllib.request
+from progress.spinner import MoonSpinner
 
 processed_file_path = './matches_files/downloaded_uuids.txt'
+BASE_CSV_DIR = "./matches_files/"
+HTML_ATOS_DIR_PATH = "./matches_files/downloaded/"
+
+CSV_COLS = [
+    'uuid',
+    'content_full'
+]
 
 def find_uuid_in_processed(id, path = processed_file_path):
     try:
@@ -121,12 +129,12 @@ def parse_processed_uuids():
         file.write(data)
     return np.loadtxt(newfile_path, dtype='str',delimiter=',')
 
+start_index = 262910
+finish_index = 525819
+slice_num = 2
+total_slices = 6
 
 def fetch_atos():
-    start_index = 262910
-    finish_index = 525819
-    slice_num = 2
-    total_slices = 6
 
     ts = time()
 
@@ -187,6 +195,42 @@ def fetch_atos():
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts) + 's')
 
+def get_html_from_pub_order(id):
+    content = ''
+    with open(HTML_ATOS_DIR_PATH + id + '.html') as file:
+        content = file.read()
+    return content
+
+def generate_csv_from_processed():
+    CSV_FILE_PATH = BASE_CSV_DIR + 'uuids_full_texts.csv'
+    csv_file = open(CSV_FILE_PATH, 'w')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(CSV_COLS)
+
+    print(" -> Lendo CSV...")
+    atos_df = pd.read_csv("./matches_files/dou_filtrado_p_download.csv", low_memory=False)
+    print(" -> CSV lido com sucesso!")
+    filtered_df = atos_df.iloc[start_index:finish_index].copy()
+
+    try:
+        with MoonSpinner('Processando...') as bar:
+            for idx in filtered_df.index:
+                ato_uuid = filtered_df.loc[idx]["uuid"]
+                ato_full_text = ""
+                
+                if not os.path.exists(HTML_ATOS_DIR_PATH + ato_uuid + '.html'):
+                    # print(f"File {ato_uuid} missing.")
+                    continue
+                else:
+                    # print(f"File {ato_uuid} found!")
+                    ato_full_text = get_html_from_pub_order(ato_uuid)
+                    csv_writer.writerow([ato_uuid, ato_full_text])
+                bar.next()
+    except Exception as e:
+        print("#### Erro!", e)
+    finally:
+        csv_file.close()
+
 if __name__ == '__main__':   
-    fetch_atos()
-    # main_csv()
+    # fetch_atos()
+    generate_csv_from_processed()
