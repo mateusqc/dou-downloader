@@ -132,7 +132,7 @@ def convert_atos_to_csv(date = '02-02-2022'):
             print(f'{date_processing} - {jornal} - Já processado!')
             # csv_file.close()
             continue
-        CSV_FILE_PATH = BASE_CSV_DIR + date_processing + '.csv'
+        CSV_FILE_PATH = BASE_CSV_DIR + date_processing + '-' + jornal + '.csv'
         csv_file = open(CSV_FILE_PATH, 'w')
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(CSV_COLS)
