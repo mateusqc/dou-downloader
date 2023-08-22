@@ -21,6 +21,7 @@ import random
 import sys
 from pre_process import pre_process_csv
 from utils import revert_date_srt
+from classifier import classify
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -566,17 +567,20 @@ if __name__ == '__main__':
         main_atos(date_list)
         main_csv(date_list)
         pre_process_csv(date_list)
+        classify(date_list)
     elif len(params) == 1 and is_valid_dates(params[0],params[0]):
         date_list = generate_dates(params[0],params[0])
         main_diarios(date_list)
         main_atos(date_list)
         main_csv(date_list)
         pre_process_csv(date_list)
+        classify(date_list)
     elif len(params) == 2 and is_valid_dates(params[0],params[1]):
         date_list = generate_dates(params[0],params[1])
         main_diarios(date_list)
         main_atos(date_list)
         main_csv(date_list)
         pre_process_csv(date_list)
+        classify(date_list)
     else:
         print('Parametros de data inválidos')

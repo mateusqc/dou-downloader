@@ -52,8 +52,7 @@ def process(dou_df,day):
 
     dou_df_filtered["title"] = dou_df_filtered["title"].apply(lambda x: pre_process_text(remove_html_tags(x.replace('\n', ' '))).lower())
     dou_df_filtered["content"] = dou_df_filtered["content"].apply(lambda x: pre_process_text(remove_html_tags(x.replace('\n', ' '))).lower())
-
-    dou_df_filtered.to_csv(f'./{PRE_PROCESS_CSV_BASE_DIR}/dou_pre-proc.csv',mode='a', index=False)
+    dou_df_filtered.to_csv(f'./{PRE_PROCESS_CSV_BASE_DIR}/{day}.csv',mode='a', index=False)
     write_processed_date(day)
 
 def pre_process_csv(date_list):
@@ -62,5 +61,9 @@ def pre_process_csv(date_list):
         if find_date_in_processed_file(day):
             print(f"O dia {day} já foi pré processado")
         else:
-            df_intermediario = pd.read_csv(f'{CSV_BASE_DIR}/{day}.csv', low_memory=False)
-            process(df_intermediario,day)    
+            
+            df_do1 = pd.read_csv(f'{CSV_BASE_DIR}/{day}-do1.csv', low_memory=False)
+            df_do2 = pd.read_csv(f'{CSV_BASE_DIR}/{day}-do2.csv', low_memory=False)
+            df_do3 = pd.read_csv(f'{CSV_BASE_DIR}/{day}-do3.csv', low_memory=False)
+            dou_df = pd.concat([df_do1,df_do2,df_do3], ignore_index=True)
+            process(dou_df,day)    
