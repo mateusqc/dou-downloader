@@ -1,20 +1,15 @@
 import pandas as pd
-import math
 import numpy as np
-import re
 from tqdm.auto import tqdm
-import html
 
 BASE_PATH_NEW_YODA = './processando_dados_yoda/dados'
 BASE_PATH_NEW_DOU = './full_data_dou'
 BASE_PATH = './data'
 
-import csv
 import random
 import nltk
 nltk.download('punkt')
 
-import os
 import torch
 import torch.nn as nn
 from torch import optim
@@ -28,8 +23,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import torch.nn.functional as F
-from sklearn.metrics import precision_recall_curve, auc
-from matplotlib import pyplot as plt
+import oracledb
 from utils import revert_date_srt
 
 
@@ -68,11 +62,25 @@ model = BertForSequenceClassification.from_pretrained('trained-models/trib-imbal
                                                       output_hidden_states = False).to(device)
 # model.cuda()
 
+connection = oracledb.connect(
+    user="dou",
+    password="dou",
+    dsn="localhost/FREEPDB1")
+
+print("Successfully connected to Oracle Database")
+
 def classify_by_day(df):
+  cursor = connection.cursor()
+  sql = "INSERT INTO DOU_ATOS (PUB_NAME, URL_TITLE, TITLE, CONTENT, PUB_DATE, UUID, ANO, DIA, MES, LABEL) VALUES (:1, :2, :3, :4, to_date(:5,'dd/MM/yyyy'), :6, :7, :8, :9, :10)" 
   df.content = df.content.astype(str)
   for row in df.itertuples():
-    df.at[row.Index,'label'] = predict(model,str(row.content),tokenizer)[0][1].item()
-  print(df[['content','label']].head(50))
+    # df.at[row.Index,'label'] = "{:.10f}".format(predict(model,str(row.content),tokenizer)[0][1].item())
+    label = "{:.10f}".format(predict(model,str(row.content),tokenizer)[0][1].item())
+    #row['label'] = predict(model,str(row.content),tokenizer)[0][1].item()
+    cursor.execute(sql,(row.pubName, row.urlTitle , row.title, row.content, row.pubDate, row.uuid, row.ano, row.mes, row.dia, label))
+    connection.commit()    
+  connection.close()
+  
 
 def classify(date_list):
   for d in date_list:
