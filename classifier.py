@@ -38,7 +38,8 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 nclasses = 2
 nepochs = 4
 batch_size = 8
@@ -50,17 +51,19 @@ model_name = "trib-all-imbalanced-berdou-lr--"
 
 print(device)
 
+torch.cuda.empty_cache()
+
 def predict(model, texts, tokenizer):
   inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=max_length).to(device)
   output = model(**inputs)
   return  F.softmax(output.logits, dim=1)
 
 tokenizer = BertTokenizer.from_pretrained('flavio-nakasato/berdou_500k', do_lower_case=False)
-model = BertForSequenceClassification.from_pretrained('trained-models/trib-imbalanced-berdou-06-04-23',
+model = BertForSequenceClassification.from_pretrained('trained-models/trib-imbalanced-bert-0.9989976409435456',
                                                       num_labels=nclasses,
                                                       output_attentions = False,
                                                       output_hidden_states = False).to(device)
-# model.cuda()
+model.cuda()
 
 connection = oracledb.connect(
     user="dou",
