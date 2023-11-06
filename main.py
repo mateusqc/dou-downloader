@@ -18,6 +18,10 @@ import socket
 from urllib3.connection import HTTPConnection
 from playwright.sync_api import sync_playwright
 import random
+import sys
+from pre_process import pre_process_csv
+from utils import revert_date_srt
+from classifier import classify
 
 HTTPConnection.default_socket_options = (
     HTTPConnection.default_socket_options + [
@@ -31,8 +35,8 @@ HTTPConnection.default_socket_options = (
 random.seed(47)
 
 MAIN_URL = "https://www.in.gov.br/leiturajornal?"
-start_date = "01/01/2013"
-end_date = "31/12/2022"
+start_date = "17/07/2023"
+end_date = "17/07/2023"
 # start_date = "01/01/2022"
 # end_date = "31/05/2022"
 BASE_CSV_DIR = './csv_files/'
@@ -77,9 +81,9 @@ def generate_dates(start=start_date, end=end_date):
 
     return date_list
 
-def revert_date_srt(date_str, separator = "-"):
-    splitted = date_str.split(separator)
-    return splitted[-1] + separator + splitted[1] + separator + splitted[0]
+# def revert_date_srt(date_str, separator = "-"):
+#     splitted = date_str.split(separator)
+#     return splitted[-1] + separator + splitted[1] + separator + splitted[0]
 
 def get_process_tracking_file_from_action(action):
     if action == 'diarios':
@@ -122,56 +126,47 @@ def find_uuid_in_processed(id, path):
         return False
 
 def convert_atos_to_csv(date = '02-02-2022'):
-    initial = f'01/01/{date}'
-    final = f'31/12/{date}'
-    dates_year = generate_dates(initial, final)
 
-    CSV_FILE_PATH = BASE_CSV_DIR + date + '.csv'
-    csv_file = open(CSV_FILE_PATH, 'w')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(CSV_COLS)
+    date_processing = revert_date_srt(str(date))    
+    for jornal in SECOES_DOU:
+        if find_date_in_processed_file(date_processing, jornal, 'csv'):
+            print(f'{date_processing} - {jornal} - Já processado!')
+            # csv_file.close()
+            continue
+        CSV_FILE_PATH = BASE_CSV_DIR + date_processing + '-' + jornal + '.csv'
+        csv_file = open(CSV_FILE_PATH, 'w')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(CSV_COLS)
+        JSON_FILE_PATH = BASE_JSON_DIR + date_processing + '-' + jornal + '.json'
+        parsed_json = {}
+        with open(JSON_FILE_PATH, 'r') as json_file:
+            json_content = json_file.read()
+            parsed_json = json.loads(json_content)
+            json_file.close()
 
-    for date_unreversed in dates_year:
-        date = revert_date_srt(str(date_unreversed))    
-        for jornal in SECOES_DOU:
-            if find_date_in_processed_file(date, jornal, 'csv'):
-                print(f'{date} - {jornal} - Já processado!')
-                # csv_file.close()
+        atos = parsed_json["jsonArray"]
+
+        total_atos = len(atos)
+
+        if total_atos == 0:
+            print(f'\t{date_processing} - {jornal} - Sem publicações!')
+            continue
+
+        for ato in atos:
+            ato_id = ato["uuid"]
+            HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date_processing + '-' + jornal + '/'
+            if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
+                print(f"File {ato_id} missing.")
                 continue
-            
-            JSON_FILE_PATH = BASE_JSON_DIR + date + '-' + jornal + '.json'
+            else:
+                print(f"File {ato_id} found!")
 
-            parsed_json = {}
+            content_full = get_html_from_pub_order(date_processing, jornal, ato_id)
+            ato["content_full"] = content_full
+            conteudo = convert_to_csv_row(ato)
+            csv_writer.writerow(conteudo)
 
-            with open(JSON_FILE_PATH, 'r') as json_file:
-                json_content = json_file.read()
-                parsed_json = json.loads(json_content)
-                json_file.close()
-
-            atos = parsed_json["jsonArray"]
-
-            total_atos = len(atos)
-
-            if total_atos == 0:
-                print(f'\t{date} - {jornal} - Sem publicações!')
-                continue
-
-            for ato in atos:
-                ato_id = ato["uuid"]
-                HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
-
-                if not os.path.exists(HTML_ATOS_DIR_PATH + ato_id + '.html'):
-                    print(f"File {ato_id} missing.")
-                    continue
-                else:
-                    print(f"File {ato_id} found!")
-
-                content_full = get_html_from_pub_order(date, jornal, ato_id)
-                ato["content_full"] = content_full
-                conteudo = convert_to_csv_row(ato)
-                csv_writer.writerow(conteudo)
-
-    csv_file.close()
+        csv_file.close()
 
 def get_html_from_pub_order(date, jornal, id):
     HTML_ATOS_DIR_PATH = BASE_HTML_DIR + 'atos/' + date + '-' + jornal + '/'
@@ -465,9 +460,8 @@ class CSVBuilderWorker(Thread):
             finally:
                 self.queue.task_done()
 
-def main_diarios():
+def main_diarios(dates_list):
     ts = time()
-    dates_list = generate_dates()
     # dates_list = ["20/03/2023"]
 
     queue = Queue()
@@ -496,9 +490,8 @@ def main_diarios():
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts))
 
-def main_atos(sample_mode = False):
+def main_atos(dates_list, sample_mode = False):
     ts = time()
-    dates_list = generate_dates()
     # dates_list = ["20/03/2023"]
 
     queue = Queue()
@@ -533,9 +526,8 @@ def main_atos(sample_mode = False):
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts) + 's')
 
-def main_csv():
+def main_csv(dates_list):
     ts = time()
-    dates_list = generate_dates()
     # dates_list = ["06/04/2022"]
 
     queue = Queue()
@@ -545,10 +537,8 @@ def main_csv():
         worker.daemon = True
         worker.start()
 
-    # for date in dates_list:
-    for year in range(2013, 2022):
-        # DATE_LINE_SEP = revert_date_srt(str(year))
-        DATE_LINE_SEP = str(year)
+    for date in dates_list:
+        DATE_LINE_SEP = str(date)
         queue.put((DATE_LINE_SEP))
             
     queue.join()
@@ -561,7 +551,36 @@ def main_csv():
     print('Processamento concluído!')
     print('Finalizado em ' + str(time() - ts))
 
+def is_valid_dates(date1,date2):
+    try:
+        d1 = datetime.strptime(date1, '%d/%m/%Y')
+        d2 = datetime.strptime(date2, '%d/%m/%Y')
+        return d2 >= d1
+    except ValueError:
+        return False
+
 if __name__ == '__main__':   
-    # main_diarios()
-    main_atos()
-    # main_csv()
+    params = sys.argv[1:]
+    if len(params) == 0:
+        date_list = generate_dates()
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
+        pre_process_csv(date_list)
+        classify(date_list)
+    elif len(params) == 1 and is_valid_dates(params[0],params[0]):
+        date_list = generate_dates(params[0],params[0])
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
+        pre_process_csv(date_list)
+        classify(date_list)
+    elif len(params) == 2 and is_valid_dates(params[0],params[1]):
+        date_list = generate_dates(params[0],params[1])
+        main_diarios(date_list)
+        main_atos(date_list)
+        main_csv(date_list)
+        pre_process_csv(date_list)
+        classify(date_list)
+    else:
+        print('Parametros de data inválidos')
